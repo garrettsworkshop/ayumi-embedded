@@ -51,7 +51,7 @@ struct ayumi {
   float cur;
 };
 
-int ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr);
+int ayumi_configure(struct ayumi* ay, float clock_rate, int sr);
 void ayumi_set_tone(struct ayumi* ay, int index, int period);
 void ayumi_set_noise(struct ayumi* ay, int period);
 void ayumi_set_mixer(struct ayumi* ay, int index, int t_off, int n_off, int e_on);

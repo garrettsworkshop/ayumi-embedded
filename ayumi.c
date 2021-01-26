@@ -4,7 +4,7 @@
 #include <math.h>
 #include "ayumi.h"
 
-static const float AY_dac_table[] = {
+static const float dac_table[] = {
   0.0, 0.0,
   0.00999465934234, 0.00999465934234,
   0.0144502937362, 0.0144502937362,
@@ -21,25 +21,6 @@ static const float AY_dac_table[] = {
   0.635324635691, 0.635324635691,
   0.805584802014, 0.805584802014,
   1.0, 1.0
-};
-
-static const float YM_dac_table[] = {
-  0.0, 0.0,
-  0.00465400167849, 0.00772106507973,
-  0.0109559777218, 0.0139620050355,
-  0.0169985503929, 0.0200198367285,
-  0.024368657969, 0.029694056611,
-  0.0350652323186, 0.0403906309606,
-  0.0485389486534, 0.0583352407111,
-  0.0680552376593, 0.0777752346075,
-  0.0925154497597, 0.111085679408,
-  0.129747463188, 0.148485542077,
-  0.17666895552, 0.211551079576,
-  0.246387426566, 0.281101701381,
-  0.333730067903, 0.400427252613,
-  0.467383840696, 0.53443198291,
-  0.635172045472, 0.75800717174,
-  0.879926756695, 1.0
 };
 
 static void reset_segment(struct ayumi* ay);
@@ -139,11 +120,10 @@ static void update_mixer(struct ayumi* ay) {
   }
 }
 
-int ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr) {
+int ayumi_configure(struct ayumi* ay, float clock_rate, int sr) {
   int i;
   memset(ay, 0, sizeof(struct ayumi));
   ay->step = clock_rate / (sr * 8 * DECIMATE_FACTOR);
-  ay->dac_table = is_ym ? YM_dac_table : AY_dac_table;
   ay->noise = 1;
   ayumi_set_envelope(ay, 1);
   for (i = 0; i < TONE_CHANNELS; i += 1) {
