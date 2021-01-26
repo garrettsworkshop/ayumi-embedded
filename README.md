@@ -1,38 +1,24 @@
-News
-====
+What is Ayumi-Embeded?
+======================
 
-JavaScript implementation by Alexander Kovalenko: https://github.com/alexanderk23/ayumi-js
+Ayumi is an emulator of the Ayumi AY-3-8910 and YM2149 sound chips. Ayumi-Embedded is a port of Ayumi to the ARMv7-M microcontroller architecture.
+
+The principal changes from Ayumi include the adoption of single-precision floating point, the elimination of the YM2149-compatible mode, and the elimination of stereo output. These changes help to make Ayumi compact enough to work well on 100 MHz-class ARM microcontrollers.
 
 Ayumi API reference
 ===================
 
 ``` c
-void ayumi_configure(struct ayumi* ay, int is_ym, double clock_rate, int sr)
+void ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr)
 ```
 
 *Configures the ayumi structure.*
 
 **ay**: The pointer to the ayumi structure.
 
-**is_ym**: 1 if the chip is YM2149.
-
 **clock_rate**: The clock rate of the chip.
 
 **sr**: The output sample rate.
-
-``` c
-void ayumi_set_pan(struct ayumi* ay, int index, double pan, int is_eqp)
-```
-
-*Sets the panning value for the specified sound channel.*
-
-**ay**: The pointer to the ayumi structure.
-
-**index**: The index of the sound channel.
-
-**pan**: The stereo panning value [0-1].
-
-**is_eqp**: 1 if "equal power" panning is used.
 
 ``` c
 void ayumi_set_tone(struct ayumi* ay, int index, int period)
