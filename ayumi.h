@@ -18,8 +18,6 @@ struct tone_channel {
   int n_off;
   int e_on;
   int volume;
-  float pan_left;
-  float pan_right;
 };
 
 struct interpolator {
@@ -45,20 +43,15 @@ struct ayumi {
   const float* dac_table;
   float step;
   float x;
-  struct interpolator interpolator_left;
-  struct interpolator interpolator_right;
-  float fir_left[FIR_SIZE * 2];
-  float fir_right[FIR_SIZE * 2];
+  struct interpolator interp;
+  float fir[FIR_SIZE * 2];
   int fir_index;
-  struct dc_filter dc_left;
-  struct dc_filter dc_right;
+  struct dc_filter dc;
   int dc_index;
-  float left;
-  float right;
+  float cur;
 };
 
 int ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr);
-void ayumi_set_pan(struct ayumi* ay, int index, float pan, int is_eqp);
 void ayumi_set_tone(struct ayumi* ay, int index, int period);
 void ayumi_set_noise(struct ayumi* ay, int period);
 void ayumi_set_mixer(struct ayumi* ay, int index, int t_off, int n_off, int e_on);

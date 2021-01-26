@@ -4,7 +4,7 @@
 #include <math.h>
 #include "ayumi.h"
 
-static const double AY_dac_table[] = {
+static const float AY_dac_table[] = {
   0.0, 0.0,
   0.00999465934234, 0.00999465934234,
   0.0144502937362, 0.0144502937362,
@@ -23,7 +23,7 @@ static const double AY_dac_table[] = {
   1.0, 1.0
 };
 
-static const double YM_dac_table[] = {
+static const float YM_dac_table[] = {
   0.0, 0.0,
   0.00465400167849, 0.00772106507973,
   0.0109559777218, 0.0139620050355,
@@ -131,17 +131,15 @@ static void update_mixer(struct ayumi* ay) {
   int out;
   int noise = update_noise(ay);
   int envelope = update_envelope(ay);
-  ay->left = 0;
-  ay->right = 0;
+  ay->cur = 0;
   for (i = 0; i < TONE_CHANNELS; i += 1) {
     out = (update_tone(ay, i) | ay->channels[i].t_off) & (noise | ay->channels[i].n_off);
     out *= ay->channels[i].e_on ? envelope : ay->channels[i].volume * 2 + 1;
-    ay->left += ay->dac_table[out] * ay->channels[i].pan_left;
-    ay->right += ay->dac_table[out] * ay->channels[i].pan_right;
+    ay->cur += ay->dac_table[out];
   }
 }
 
-int ayumi_configure(struct ayumi* ay, int is_ym, double clock_rate, int sr) {
+int ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr) {
   int i;
   memset(ay, 0, sizeof(struct ayumi));
   ay->step = clock_rate / (sr * 8 * DECIMATE_FACTOR);
@@ -152,16 +150,6 @@ int ayumi_configure(struct ayumi* ay, int is_ym, double clock_rate, int sr) {
     ayumi_set_tone(ay, i, 1);
   }
   return ay->step < 1;
-}
-
-void ayumi_set_pan(struct ayumi* ay, int index, double pan, int is_eqp) {
-  if (is_eqp) {
-    ay->channels[index].pan_left = sqrt(1 - pan);
-    ay->channels[index].pan_right = sqrt(pan);
-  } else {
-    ay->channels[index].pan_left = 1 - pan;
-    ay->channels[index].pan_right = pan;
-  }
 }
 
 void ayumi_set_tone(struct ayumi* ay, int index, int period) {
@@ -195,8 +183,8 @@ void ayumi_set_envelope_shape(struct ayumi* ay, int shape) {
   reset_segment(ay);
 }
 
-static double decimate(double* x) {
-  double y = -0.0000046183113992051936 * (x[1] + x[191]) +
+static float decimate(float* x) {
+  float y = -0.0000046183113992051936 * (x[1] + x[191]) +
     -0.00001117761640887225 * (x[2] + x[190]) +
     -0.000018610264502005432 * (x[3] + x[189]) +
     -0.000025134586135631012 * (x[4] + x[188]) +
@@ -281,57 +269,43 @@ static double decimate(double* x) {
     0.11236045936950932 * (x[94] + x[98]) +
     0.12176343577287731 * (x[95] + x[97]) +
     0.125 * x[96];
-  memcpy(&x[FIR_SIZE - DECIMATE_FACTOR], x, DECIMATE_FACTOR * sizeof(double));
+  memcpy(&x[FIR_SIZE - DECIMATE_FACTOR], x, DECIMATE_FACTOR * sizeof(float));
   return y;
 }
 
 void ayumi_process(struct ayumi* ay) {
   int i;
-  double y1;
-  double* c_left = ay->interpolator_left.c;
-  double* y_left = ay->interpolator_left.y;
-  double* c_right = ay->interpolator_right.c;
-  double* y_right = ay->interpolator_right.y;
-  double* fir_left = &ay->fir_left[FIR_SIZE - ay->fir_index * DECIMATE_FACTOR];
-  double* fir_right = &ay->fir_right[FIR_SIZE - ay->fir_index * DECIMATE_FACTOR];
+  float y1;
+  float* c = ay->interp.c;
+  float* y = ay->interp.y;
+  float* fir = &ay->fir[FIR_SIZE - ay->fir_index * DECIMATE_FACTOR];
   ay->fir_index = (ay->fir_index + 1) % (FIR_SIZE / DECIMATE_FACTOR - 1);
   for (i = DECIMATE_FACTOR - 1; i >= 0; i -= 1) {
     ay->x += ay->step;
     if (ay->x >= 1) {
       ay->x -= 1;
-      y_left[0] = y_left[1];
-      y_left[1] = y_left[2];
-      y_left[2] = y_left[3];
-      y_right[0] = y_right[1];
-      y_right[1] = y_right[2];
-      y_right[2] = y_right[3];
+      y[0] = y[1];
+      y[1] = y[2];
+      y[2] = y[3];
       update_mixer(ay);
-      y_left[3] = ay->left;
-      y_right[3] = ay->right;
-      y1 = y_left[2] - y_left[0];
-      c_left[0] = 0.5 * y_left[1] + 0.25 * (y_left[0] + y_left[2]);
-      c_left[1] = 0.5 * y1;
-      c_left[2] = 0.25 * (y_left[3] - y_left[1] - y1);
-      y1 = y_right[2] - y_right[0];
-      c_right[0] = 0.5 * y_right[1] + 0.25 * (y_right[0] + y_right[2]);
-      c_right[1] = 0.5 * y1;
-      c_right[2] = 0.25 * (y_right[3] - y_right[1] - y1);
+      y[3] = ay->cur;
+      y1 = y[2] - y[0];
+      c[0] = 0.5 * y[1] + 0.25 * (y[0] + y[2]);
+      c[1] = 0.5 * y1;
+      c[2] = 0.25 * (y[3] - y[1] - y1);
     }
-    fir_left[i] = (c_left[2] * ay->x + c_left[1]) * ay->x + c_left[0];
-    fir_right[i] = (c_right[2] * ay->x + c_right[1]) * ay->x + c_right[0];
+    fir[i] = (c[2] * ay->x + c[1]) * ay->x + c[0];
   }
-  ay->left = decimate(fir_left);
-  ay->right = decimate(fir_right);
+  ay->cur = decimate(fir);
 }
 
-static double dc_filter(struct dc_filter* dc, int index, double x) {
+static float dc_filter(struct dc_filter* dc, int index, float x) {
   dc->sum += -dc->delay[index] + x;
   dc->delay[index] = x; 
   return x - dc->sum / DC_FILTER_SIZE;
 }
 
 void ayumi_remove_dc(struct ayumi* ay) {
-  ay->left = dc_filter(&ay->dc_left, ay->dc_index, ay->left);
-  ay->right = dc_filter(&ay->dc_right, ay->dc_index, ay->right);
+  ay->cur = dc_filter(&ay->dc, ay->dc_index, ay->cur);
   ay->dc_index = (ay->dc_index + 1) & (DC_FILTER_SIZE - 1);
 }
