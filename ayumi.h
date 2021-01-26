@@ -18,18 +18,18 @@ struct tone_channel {
   int n_off;
   int e_on;
   int volume;
-  double pan_left;
-  double pan_right;
+  float pan_left;
+  float pan_right;
 };
 
 struct interpolator {
-  double c[4];
-  double y[4];
+  float c[4];
+  float y[4];
 };
 
 struct dc_filter {
-  double sum;
-  double delay[DC_FILTER_SIZE];
+  float sum;
+  float delay[DC_FILTER_SIZE];
 };
 
 struct ayumi {
@@ -42,23 +42,23 @@ struct ayumi {
   int envelope_shape;
   int envelope_segment;
   int envelope;
-  const double* dac_table;
-  double step;
-  double x;
+  const float* dac_table;
+  float step;
+  float x;
   struct interpolator interpolator_left;
   struct interpolator interpolator_right;
-  double fir_left[FIR_SIZE * 2];
-  double fir_right[FIR_SIZE * 2];
+  float fir_left[FIR_SIZE * 2];
+  float fir_right[FIR_SIZE * 2];
   int fir_index;
   struct dc_filter dc_left;
   struct dc_filter dc_right;
   int dc_index;
-  double left;
-  double right;
+  float left;
+  float right;
 };
 
-int ayumi_configure(struct ayumi* ay, int is_ym, double clock_rate, int sr);
-void ayumi_set_pan(struct ayumi* ay, int index, double pan, int is_eqp);
+int ayumi_configure(struct ayumi* ay, int is_ym, float clock_rate, int sr);
+void ayumi_set_pan(struct ayumi* ay, int index, float pan, int is_eqp);
 void ayumi_set_tone(struct ayumi* ay, int index, int period);
 void ayumi_set_noise(struct ayumi* ay, int period);
 void ayumi_set_mixer(struct ayumi* ay, int index, int t_off, int n_off, int e_on);
