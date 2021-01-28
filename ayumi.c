@@ -262,77 +262,83 @@ void ayumi_set_envelope_shape(struct ayumi* const ay, const int shape) {
   reset_segment(ay);
 }
 
-static float decimate(float* const x) {
-  register float y = 0.0f;
-  register const float const *a = x;
-  register const float const *b = x+192;
-  register const float const *w = w;
 
-  for (int i = 0; i < 96; i+=16) {
-    asm volatile(
-      // Load a[0-15], b[1-15]
-      "VLDMIA.32 %[a]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7,  s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t"
-      "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
-      // Decrement b because only loaded 15 floats
-      "SUB %[b], %[b], #4 \n\t"
-      // Add a[1-7,9-15] = a[1-7,9-15] + b[1-7,9-15]
-      "VADD.F32 s1,  s1,  s17 \n\t"
-      "VADD.F32 s2,  s2,  s18 \n\t"
-      "VADD.F32 s3,  s3,  s19 \n\t"
-      "VADD.F32 s4,  s4,  s20 \n\t"
-      "VADD.F32 s5,  s5,  s21 \n\t"
-      "VADD.F32 s6,  s6,  s22 \n\t"
-      "VADD.F32 s7,  s7,  s23 \n\t"
-      "VADD.F32 s9,  s9,  s25 \n\t"
-      "VADD.F32 s10, s10, s26 \n\t"
-      "VADD.F32 s11, s11, s27 \n\t"
-      "VADD.F32 s12, s12, s28 \n\t"
-      "VADD.F32 s13, s13, s29 \n\t"
-      "VADD.F32 s14, s14, s30 \n\t"
-      "VADD.F32 s15, s15, s31 \n\t"
-      // Load w[1-15] now that S17-S31 are free
-      "VLDMIA.32 %[w]!, { s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
-      // Increment w because only loaded 15 floats
-      "ADD %[w], %[w], #4 \n\t"
-      // Multiply to compute w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15])
-      "VMUL.F32 s1,  s1,  s17 \n\t"
-      "VMUL.F32 s2,  s2,  s18 \n\t"
-      "VMUL.F32 s3,  s3,  s19 \n\t"
-      "VMUL.F32 s4,  s4,  s20 \n\t"
-      "VMUL.F32 s5,  s5,  s21 \n\t"
-      "VMUL.F32 s6,  s6,  s22 \n\t"
-      "VMUL.F32 s7,  s7,  s23 \n\t"
-      "VMUL.F32 s9,  s9,  s25 \n\t"
-      "VMUL.F32 s10, s10, s26 \n\t"
-      "VMUL.F32 s11, s11, s27 \n\t"
-      "VMUL.F32 s12, s12, s28 \n\t"
-      "VMUL.F32 s13, s13, s29 \n\t"
-      "VMUL.F32 s14, s14, s30 \n\t"
-      "VMUL.F32 s15, s15, s31 \n\t"
-      // Accumulate w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) into y register
-      "VADD.F32 %[y], %[y], s1  \n\t"
-      "VADD.F32 %[y], %[y], s2  \n\t"
-      "VADD.F32 %[y], %[y], s3  \n\t"
-      "VADD.F32 %[y], %[y], s4  \n\t"
-      "VADD.F32 %[y], %[y], s5  \n\t"
-      "VADD.F32 %[y], %[y], s6  \n\t"
-      "VADD.F32 %[y], %[y], s7  \n\t"
-      "VADD.F32 %[y], %[y], s9  \n\t"
-      "VADD.F32 %[y], %[y], s10 \n\t"
-      "VADD.F32 %[y], %[y], s11 \n\t"
-      "VADD.F32 %[y], %[y], s12 \n\t"
-      "VADD.F32 %[y], %[y], s13 \n\t"
-      "VADD.F32 %[y], %[y], s14 \n\t"
-      "VADD.F32 %[y], %[y], s15 \n\t"
-      : [a] "+r" (a), [b] "+r" (b),
-        [w] "+r" (w), [y] "+t" (y)
-      :
-      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
-        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15",
-               "s17", "s18", "s19", "s20", "s21", "s22", "s23",
-        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31"
+#define decimate_mac16 \
+      asm volatile( \
+      /* Load a[0-15], b[1-15] */ \
+      "VLDMIA.32 %[a]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7,  s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t" \
+      "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
+      /* Decrement b because only loaded 15 floats */ \
+      "SUB %[b], %[b], #4 \n\t" \
+      /* Add a[1-7,9-15] = a[1-7,9-15] + b[1-7,9-15] */ \
+      "VADD.F32 s1,  s1,  s17 \n\t" \
+      "VADD.F32 s2,  s2,  s18 \n\t" \
+      "VADD.F32 s3,  s3,  s19 \n\t" \
+      "VADD.F32 s4,  s4,  s20 \n\t" \
+      "VADD.F32 s5,  s5,  s21 \n\t" \
+      "VADD.F32 s6,  s6,  s22 \n\t" \
+      "VADD.F32 s7,  s7,  s23 \n\t" \
+      "VADD.F32 s9,  s9,  s25 \n\t" \
+      "VADD.F32 s10, s10, s26 \n\t" \
+      "VADD.F32 s11, s11, s27 \n\t" \
+      "VADD.F32 s12, s12, s28 \n\t" \
+      "VADD.F32 s13, s13, s29 \n\t" \
+      "VADD.F32 s14, s14, s30 \n\t" \
+      "VADD.F32 s15, s15, s31 \n\t" \
+      /* Load w[1-15] now that S17-S31 are free */ \
+      "VLDMIA.32 %[w]!, { s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
+      /* Increment w because only loaded 15 floats */ \
+      "ADD %[w], %[w], #4 \n\t" \
+      /* Multiply to compute w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
+         Interleaved with accumulating w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
+         into y register */ \
+      "VMUL.F32 s1,  s1,  s17 \n\t" \
+      "VADD.F32 %[y], %[y], s1  \n\t" \
+      "VMUL.F32 s2,  s2,  s18 \n\t" \
+      "VADD.F32 %[y], %[y], s2  \n\t" \
+      "VMUL.F32 s3,  s3,  s19 \n\t" \
+      "VADD.F32 %[y], %[y], s3  \n\t" \
+      "VMUL.F32 s4,  s4,  s20 \n\t" \
+      "VADD.F32 %[y], %[y], s4  \n\t" \
+      "VMUL.F32 s5,  s5,  s21 \n\t" \
+      "VADD.F32 %[y], %[y], s5  \n\t" \
+      "VMUL.F32 s6,  s6,  s22 \n\t" \
+      "VADD.F32 %[y], %[y], s6  \n\t" \
+      "VMUL.F32 s7,  s7,  s23 \n\t" \
+      "VADD.F32 %[y], %[y], s7  \n\t" \
+      "VMUL.F32 s9,  s9,  s25 \n\t" \
+      "VADD.F32 %[y], %[y], s9  \n\t" \
+      "VMUL.F32 s10, s10, s26 \n\t" \
+      "VADD.F32 %[y], %[y], s10 \n\t" \
+      "VMUL.F32 s11, s11, s27 \n\t" \
+      "VADD.F32 %[y], %[y], s11 \n\t" \
+      "VMUL.F32 s12, s12, s28 \n\t" \
+      "VADD.F32 %[y], %[y], s12 \n\t" \
+      "VMUL.F32 s13, s13, s29 \n\t" \
+      "VADD.F32 %[y], %[y], s13 \n\t" \
+      "VMUL.F32 s14, s14, s30 \n\t" \
+      "VADD.F32 %[y], %[y], s14 \n\t" \
+      "VMUL.F32 s15, s15, s31 \n\t" \
+      : [a] "+r" (a), [b] "+r" (b), \
+        [w] "+r" (w), [y] "+t" (y) \
+      : \
+      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7", \
+        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15", \
+               "s17", "s18", "s19", "s20", "s21", "s22", "s23", \
+        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31" \
     );
-  }
+
+static float decimate(float *x) {
+  register float *a = x;
+  register float *b = x+192;
+  register const float *w = w;
+  register float y = 0.0f;
+  decimate_mac16;
+  decimate_mac16;
+  decimate_mac16;
+  decimate_mac16;
+  decimate_mac16;
+  decimate_mac16;
   y += sinc_table[96] * x[96];
 
   memcpy(&x[FIR_SIZE - DECIMATE_FACTOR], x, DECIMATE_FACTOR * sizeof(float));
