@@ -283,7 +283,6 @@ static float decimate(float* const x) {
       "VADD.F32 s5,  s5,  s21 \n\t"
       "VADD.F32 s6,  s6,  s22 \n\t"
       "VADD.F32 s7,  s7,  s23 \n\t"
-      "VADD.F32 s8,  s8,  s24 \n\t"
       "VADD.F32 s9,  s9,  s25 \n\t"
       "VADD.F32 s10, s10, s26 \n\t"
       "VADD.F32 s11, s11, s27 \n\t"
@@ -295,7 +294,7 @@ static float decimate(float* const x) {
       "VLDMIA.32 %[w]!, { s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
       // Increment w because only loaded 15 floats
       "ADD %[w], %[w], #4 \n\t"
-      // Multiply to compute w[1-15] * (a[1-15] + b[1-15])
+      // Multiply to compute w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15])
       "VMUL.F32 s1,  s1,  s17 \n\t"
       "VMUL.F32 s2,  s2,  s18 \n\t"
       "VMUL.F32 s3,  s3,  s19 \n\t"
@@ -303,7 +302,6 @@ static float decimate(float* const x) {
       "VMUL.F32 s5,  s5,  s21 \n\t"
       "VMUL.F32 s6,  s6,  s22 \n\t"
       "VMUL.F32 s7,  s7,  s23 \n\t"
-      "VMUL.F32 s8,  s8,  s24 \n\t"
       "VMUL.F32 s9,  s9,  s25 \n\t"
       "VMUL.F32 s10, s10, s26 \n\t"
       "VMUL.F32 s11, s11, s27 \n\t"
