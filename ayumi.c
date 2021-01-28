@@ -275,7 +275,7 @@ static float decimate(float* const x) {
       "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
       // Decrement b because only loaded 15 floats
       "SUB %[b], %[b], #4 \n\t"
-      // Add a[15:0] = a[1-15] + b[1-15]
+      // Add a[1-7,9-15] = a[1-7,9-15] + b[1-7,9-15]
       "VADD.F32 s1,  s1,  s17 \n\t"
       "VADD.F32 s2,  s2,  s18 \n\t"
       "VADD.F32 s3,  s3,  s19 \n\t"
@@ -342,102 +342,6 @@ static float decimate(float* const x) {
   return y;
 }
 
-/*struct decimate2_result { float y1; float y2; };
-struct decimate2_result decimate2(float* const x1, float* const x2) {
-  register float y1 = 0.0f;
-  register float y2 = 0.0f;
-  register const float const *a1 = x1;
-  register const float const *b1 = x1+192+1;
-  register const float const *a2 = x2;
-  register const float const *b2 = x2+192+1;
-  register const float const *w = w;
-
-  for (int i = 0; i < 96; i+=8) {
-    asm volatile(
-      // Load a1[7:0], b1[7:0], a2[7:0], b2[7:0]
-      "VLDMIA.32 %[a1]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7  } \n\t"
-      "VLDMDB.32 %[b1]!, { s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t"
-      "VLDMIA.32 %[a2]!, { s16, s17, s18, s19, s20, s21, s22, s23 } \n\t"
-      "VLDMDB.32 %[b2]!, { s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
-      // Add a1[7:0] = a1[7:0]+b1[7:0]
-      "VADD.F32 s0,  s0,  s8  \n\t"
-      "VADD.F32 s1,  s1,  s9  \n\t"
-      "VADD.F32 s2,  s2,  s10 \n\t"
-      "VADD.F32 s3,  s3,  s11 \n\t"
-      "VADD.F32 s4,  s4,  s12 \n\t"
-      "VADD.F32 s5,  s5,  s13 \n\t"
-      "VADD.F32 s6,  s6,  s14 \n\t"
-      "VADD.F32 s7,  s7,  s15 \n\t"
-      // Add a2[7:0] = a2[7:0]+b2[7:0]
-      "VADD.F32 s16, s16, s24 \n\t"
-      "VADD.F32 s17, s17, s25 \n\t"
-      "VADD.F32 s18, s18, s26 \n\t"
-      "VADD.F32 s19, s19, s27 \n\t"
-      "VADD.F32 s20, s20, s28 \n\t"
-      "VADD.F32 s21, s21, s29 \n\t"
-      "VADD.F32 s22, s22, s30 \n\t"
-      "VADD.F32 s23, s23, s31 \n\t"
-      // Load w[7:0] now that S24-S31 (and S8-S15) are free
-      "VLDMIA.32 %[w]!, { s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
-      // Multiply to compute w[7:0] * (a1[7:0] + b1[7:0])
-      "VMUL.F32 s0,  s0,  s24 \n\t"
-      "VMUL.F32 s1,  s1,  s25 \n\t"
-      "VMUL.F32 s2,  s2,  s26 \n\t"
-      "VMUL.F32 s3,  s3,  s27 \n\t"
-      "VMUL.F32 s4,  s4,  s28 \n\t"
-      "VMUL.F32 s5,  s5,  s29 \n\t"
-      "VMUL.F32 s6,  s6,  s30 \n\t"
-      "VMUL.F32 s7,  s7,  s31 \n\t"
-      // Multiply to compute w[7:0] * (a2[7:0] + b2[7:0])
-      "VMUL.F32 s16, s16, s24 \n\t"
-      "VMUL.F32 s17, s17, s25 \n\t"
-      "VMUL.F32 s18, s18, s26 \n\t"
-      "VMUL.F32 s19, s19, s27 \n\t"
-      "VMUL.F32 s20, s20, s28 \n\t"
-      "VMUL.F32 s21, s21, s29 \n\t"
-      "VMUL.F32 s22, s22, s30 \n\t"
-      "VMUL.F32 s23, s23, s31 \n\t"
-      // Get y1 and y2 from ARM registers into S8 and S9
-      "VMOV s8, s9, %[y1], %[y2] \n\t"
-      // Accumulate w[7:0] * (a1[7:0] + b1[7:0]) into S8
-      // and w[7:0] * (a1[7:0] + b1[7:0]) into S9
-      "VADD.F32 s8,  s8,  s0  \n\t"
-      "VADD.F32 s9,  s9,  s16 \n\t"
-      "VADD.F32 s8,  s8,  s1  \n\t"
-      "VADD.F32 s9,  s9,  s17 \n\t"
-      "VADD.F32 s8,  s8,  s2  \n\t"
-      "VADD.F32 s9,  s9,  s18 \n\t"
-      "VADD.F32 s8,  s8,  s3  \n\t"
-      "VADD.F32 s9,  s9,  s19 \n\t"
-      "VADD.F32 s8,  s8,  s4  \n\t"
-      "VADD.F32 s9,  s9,  s20 \n\t"
-      "VADD.F32 s8,  s8,  s5  \n\t"
-      "VADD.F32 s9,  s9,  s21 \n\t"
-      "VADD.F32 s8,  s8,  s6  \n\t"
-      "VADD.F32 s9,  s9,  s22 \n\t"
-      "VADD.F32 s8,  s8,  s7  \n\t"
-      "VADD.F32 s9,  s9,  s23 \n\t"
-      // Restore S8 and S9 back to y1 and y2 designated ARM registers
-      "VMOV %[y1], %[y2], s8, s9 \n\t"
-      : [a1]   "+r" (a1), [b1]  "+r" (b1),
-        [a2]   "+r" (a2), [b2]  "+r" (b2),
-        [w]    "+r" (w),
-        [y1]   "+r" (y1), [y2]  "+r" (y2)
-      :
-      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
-        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15",
-        "s16", "s17", "s18", "s19", "s20", "s21", "s22", "s23",
-        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31"
-    );
-  }
-  y1 += sinc_table[96] * x1[96];
-  y2 += sinc_table[96] * x2[96];
-
-  memcpy(&x1[FIR_SIZE - DECIMATE_FACTOR], x1, DECIMATE_FACTOR * sizeof(float));
-  memcpy(&x2[FIR_SIZE - DECIMATE_FACTOR], x2, DECIMATE_FACTOR * sizeof(float));
-  return (struct decimate2_result){ y1, y2 };
-}*/
-
 static float* ayumi_process_internal(struct ayumi* const ay) {
   int i;
   float y1;
@@ -466,12 +370,6 @@ static float* ayumi_process_internal(struct ayumi* const ay) {
 void ayumi_process(struct ayumi* const ay) {
   ay->cur = decimate(ayumi_process_internal(ay));
 }
-
-/*void ayumi_process2(struct ayumi* const ay1, struct ayumi* const ay2) {
-  struct decimate2_result r = decimate2(ayumi_process_internal(ay1), ayumi_process_internal(ay2));
-  ay1->cur = r.y1;
-  ay2->cur = r.y2;
-}*/
 
 static float dc_filter(struct dc_filter* const dc, const int index, const float x) {
   dc->sum += -dc->delay[index] + x;
