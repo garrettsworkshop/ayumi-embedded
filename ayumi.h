@@ -51,14 +51,15 @@ struct ayumi {
   float cur;
 };
 
-int ayumi_configure(struct ayumi* ay, float clock_rate, int sr);
-void ayumi_set_tone(struct ayumi* ay, int index, int period);
-void ayumi_set_noise(struct ayumi* ay, int period);
-void ayumi_set_mixer(struct ayumi* ay, int index, int t_off, int n_off, int e_on);
-void ayumi_set_volume(struct ayumi* ay, int index, int volume);
-void ayumi_set_envelope(struct ayumi* ay, int period);
-void ayumi_set_envelope_shape(struct ayumi* ay, int shape);
-void ayumi_process(struct ayumi* ay);
-void ayumi_remove_dc(struct ayumi* ay);
+int ayumi_configure(struct ayumi* const ay, const float clock_rate, const int sr);
+void ayumi_set_tone(struct ayumi* const ay, const int index, const int period);
+void ayumi_set_noise(struct ayumi* const ay, const int period);
+void ayumi_set_mixer(struct ayumi* const ay, const int index, const int t_off, const int n_off, const int e_on);
+void ayumi_set_volume(struct ayumi* const ay, const int index, const int volume);
+void ayumi_set_envelope(struct ayumi* const ay, const int period);
+void ayumi_set_envelope_shape(struct ayumi* const ay, const int shape);
+void ayumi_process(struct ayumi* const ay);
+//void ayumi_process2(struct ayumi* const ay1, struct ayumi* const ay2);
+void ayumi_remove_dc(struct ayumi* const ay);
 
 #endif

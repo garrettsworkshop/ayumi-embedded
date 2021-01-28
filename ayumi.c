@@ -1,10 +1,9 @@
 /* Author: Peter Sovietov */
 
 #include <string.h>
-#include <math.h>
 #include "ayumi.h"
 
-static const float dac_table[] = {
+static const float const dac_table[] = {
   0.0f, 0.0f,
   0.00999465934234f, 0.00999465934234f,
   0.0144502937362f, 0.0144502937362f,
@@ -23,9 +22,109 @@ static const float dac_table[] = {
   1.0f, 1.0f
 };
 
-static void reset_segment(struct ayumi* ay);
+static const float const sinc_table[] = {
+   0.0f,
+  -0.0000046183113992051936f,
+  -0.0000111776164088722500f,
+  -0.0000186102645020054320f,
+  -0.0000251345861356310120f,
+  -0.0000284942816906661970f,
+  -0.0000263968287932751590f,
+  -0.0000170942125588021560f,
+   0.0f,
+   0.0000237981935769668660f,
+   0.0000512811602422021830f,
+   0.0000776219782624342700f,
+   0.0000967594266641204160f,
+   0.0001024022930039340200f,
+   0.0000893446142180771060f,
+   0.0000548757001189491830f,
+   0.0f,
+  -0.0000698390822106801650f,
+  -0.0001447966132360757000f,
+  -0.0002115845291770830800f,
+  -0.0002553506910655054400f,
+  -0.0002622871437432210400f,
+  -0.0002225880592702779900f,
+  -0.0001332323049569570400f,
+   0.0f,
+   0.0001618257876705520600f,
+   0.0003284617538509658100f,
+   0.0004704561157618486300f,
+   0.0005571385145753094400f,
+   0.0005621256512151872600f,
+   0.0004690191855396247800f,
+   0.0002762486683895298600f,
+   0.0f,
+  -0.0003256417948683862200f,
+  -0.0006518231028671038800f,
+  -0.0009212778730931929800f,
+  -0.0010772534348943575000f,
+  -0.0010737727700273478000f,
+  -0.0008855664539039263400f,
+  -0.0005158189609076553400f,
+   0.0f,
+   0.0005954876719379527700f,
+   0.0011803558710661009000f,
+   0.0016527320270369871000f,
+   0.0019152679330965555000f,
+   0.0018927324805381538000f,
+   0.0015481870327877937000f,
+   0.0008947069583494130600f,
+   0.0f,
+  -0.0010178225878206125000f,
+  -0.0020037400552054292000f,
+  -0.0027874356824117317000f,
+  -0.0032103299880219430000f,
+  -0.0031540624117984395000f,
+  -0.0025657163651900345000f,
+  -0.0014750752642111449000f,
+   0.0f,
+   0.0016624165446378462000f,
+   0.0032591192839069179000f,
+   0.0045165685815867747000f,
+   0.0051838984346123896000f,
+   0.0050774264697459933000f,
+   0.0041192521414141585000f,
+   0.0023628575417966491000f,
+   0.0f,
+  -0.0026543507866759182000f,
+  -0.0051990251084333425000f,
+  -0.0072020238234656924000f,
+  -0.0082672928192007358000f,
+  -0.0081033739572956287000f,
+  -0.0065831115395702210000f,
+  -0.0037839040415292386000f,
+   0.0f,
+   0.0042781252851152507000f,
+   0.0084176358598320178000f,
+   0.0117256605746305500000f,
+   0.0135504766477886720000f,
+   0.0133881893699974960000f,
+   0.0109795012423412590000f,
+   0.0063812749416854130000f,
+   0.0f,
+  -0.0074212296041538880000f,
+  -0.0148645630434021300000f,
+  -0.0211435846221781040000f,
+  -0.0250427505875860900000f,
+  -0.0254735309425472010000f,
+  -0.0216273100178821960000f,
+  -0.0131043233832255430000f,
+   0.0f,
+   0.0170651339899804760000f,
+   0.0369789192644519520000f,
+   0.0582331806209395800000f,
+   0.0790720120814059490000f,
+   0.0976759987169523170000f,
+   0.1123604593695093200000f,
+   0.1217634357728773100000f,
+   0.125f
+};
 
-static int update_tone(struct ayumi* ay, int index) {
+static void reset_segment(struct ayumi* const ay);
+
+static int update_tone(struct ayumi* ay, const int index) {
   struct tone_channel* ch = &ay->channels[index];
   ch->tone_counter += 1;
   if (ch->tone_counter >= ch->tone_period) {
@@ -35,7 +134,7 @@ static int update_tone(struct ayumi* ay, int index) {
   return ch->tone;
 }
 
-static int update_noise(struct ayumi* ay) {
+static int update_noise(struct ayumi* const ay) {
   int bit0x3;
   ay->noise_counter += 1;
   if (ay->noise_counter >= (ay->noise_period << 1)) {
@@ -46,7 +145,7 @@ static int update_noise(struct ayumi* ay) {
   return ay->noise & 1;
 }
 
-static void slide_up(struct ayumi* ay) {
+static void slide_up(struct ayumi* const ay) {
   ay->envelope += 1;
   if (ay->envelope > 31) {
     ay->envelope_segment ^= 1;
@@ -54,7 +153,7 @@ static void slide_up(struct ayumi* ay) {
   }
 }
 
-static void slide_down(struct ayumi* ay) {
+static void slide_down(struct ayumi* const ay) {
   ay->envelope -= 1;
   if (ay->envelope < 0) {
     ay->envelope_segment ^= 1;
@@ -62,15 +161,15 @@ static void slide_down(struct ayumi* ay) {
   }
 }
 
-static void hold_top(struct ayumi* ay) {
+static void hold_top(struct ayumi* const ay) {
   (void) ay;
 }
 
-static void hold_bottom(struct ayumi* ay) {
+static void hold_bottom(struct ayumi* const ay) {
   (void) ay;
 }
 
-static void (* const Envelopes[][2])(struct ayumi*) = {
+static void (* const Envelopes[][2])(struct ayumi* const) = {
   {slide_down, hold_bottom},
   {slide_down, hold_bottom},
   {slide_down, hold_bottom},
@@ -89,7 +188,7 @@ static void (* const Envelopes[][2])(struct ayumi*) = {
   {slide_up, hold_bottom}
 };
 
-static void reset_segment(struct ayumi* ay) {
+static void reset_segment(struct ayumi* const ay) {
   if (Envelopes[ay->envelope_shape][ay->envelope_segment] == slide_down
     || Envelopes[ay->envelope_shape][ay->envelope_segment] == hold_top) {
     ay->envelope = 31;
@@ -98,7 +197,7 @@ static void reset_segment(struct ayumi* ay) {
   ay->envelope = 0;
 }
 
-int update_envelope(struct ayumi* ay) {
+int update_envelope(struct ayumi* const ay) {
   ay->envelope_counter += 1;
   if (ay->envelope_counter >= ay->envelope_period) {
     ay->envelope_counter = 0;
@@ -107,7 +206,7 @@ int update_envelope(struct ayumi* ay) {
   return ay->envelope;
 }
 
-static void update_mixer(struct ayumi* ay) {
+static void update_mixer(struct ayumi* const ay) {
   int i;
   int out;
   int noise = update_noise(ay);
@@ -120,7 +219,7 @@ static void update_mixer(struct ayumi* ay) {
   }
 }
 
-int ayumi_configure(struct ayumi* ay, float clock_rate, int sr) {
+int ayumi_configure(struct ayumi* const ay, const float clock_rate, const int sr) {
   int i;
   memset(ay, 0, sizeof(struct ayumi));
   ay->step = clock_rate / (sr * 8 * DECIMATE_FACTOR);
@@ -132,128 +231,214 @@ int ayumi_configure(struct ayumi* ay, float clock_rate, int sr) {
   return ay->step < 1;
 }
 
-void ayumi_set_tone(struct ayumi* ay, int index, int period) {
-  period &= 0xfff;
-  ay->channels[index].tone_period = (period == 0) | period;
+void ayumi_set_tone(struct ayumi* const ay, const int index, const int period) {
+  int period_masked = period & 0xffff;
+  ay->channels[index].tone_period = (period_masked == 0) | period_masked;
 }
 
-void ayumi_set_noise(struct ayumi* ay, int period) {
+void ayumi_set_noise(struct ayumi* const ay, const int period) {
   ay->noise_period = period & 0x1f;
 }
 
-void ayumi_set_mixer(struct ayumi* ay, int index, int t_off, int n_off, int e_on) {
+void ayumi_set_mixer(struct ayumi* const ay, const int index, const int t_off, const int n_off, const int e_on) {
   ay->channels[index].t_off = t_off & 1;
   ay->channels[index].n_off = n_off & 1;
   ay->channels[index].e_on = e_on;
 }
 
-void ayumi_set_volume(struct ayumi* ay, int index, int volume) {
+void ayumi_set_volume(struct ayumi* const ay, const int index, const int volume) {
   ay->channels[index].volume = volume & 0xf;
 }
 
-void ayumi_set_envelope(struct ayumi* ay, int period) {
-  period &= 0xffff;
-  ay->envelope_period = (period == 0) | period;
+void ayumi_set_envelope(struct ayumi* const ay, const int period) {
+  int period_masked = period &  0xffff;
+  ay->envelope_period = (period_masked == 0) | period_masked;
 }
 
-void ayumi_set_envelope_shape(struct ayumi* ay, int shape) {
+void ayumi_set_envelope_shape(struct ayumi* const ay, const int shape) {
   ay->envelope_shape = shape & 0xf;
   ay->envelope_counter = 0;
   ay->envelope_segment = 0;
   reset_segment(ay);
 }
 
-static float decimate(float* x) {
-  float y = -0.0000046183113992051936f * (x[1] + x[191]) +
-    -0.00001117761640887225f * (x[2] + x[190]) +
-    -0.000018610264502005432f * (x[3] + x[189]) +
-    -0.000025134586135631012f * (x[4] + x[188]) +
-    -0.000028494281690666197f * (x[5] + x[187]) +
-    -0.000026396828793275159f * (x[6] + x[186]) +
-    -0.000017094212558802156f * (x[7] + x[185]) +
-    0.000023798193576966866f * (x[9] + x[183]) +
-    0.000051281160242202183f * (x[10] + x[182]) +
-    0.00007762197826243427f * (x[11] + x[181]) +
-    0.000096759426664120416f * (x[12] + x[180]) +
-    0.00010240229300393402f * (x[13] + x[179]) +
-    0.000089344614218077106f * (x[14] + x[178]) +
-    0.000054875700118949183f * (x[15] + x[177]) +
-    -0.000069839082210680165f * (x[17] + x[175]) +
-    -0.0001447966132360757f * (x[18] + x[174]) +
-    -0.00021158452917708308f * (x[19] + x[173]) +
-    -0.00025535069106550544f * (x[20] + x[172]) +
-    -0.00026228714374322104f * (x[21] + x[171]) +
-    -0.00022258805927027799f * (x[22] + x[170]) +
-    -0.00013323230495695704f * (x[23] + x[169]) +
-    0.00016182578767055206f * (x[25] + x[167]) +
-    0.00032846175385096581f * (x[26] + x[166]) +
-    0.00047045611576184863f * (x[27] + x[165]) +
-    0.00055713851457530944f * (x[28] + x[164]) +
-    0.00056212565121518726f * (x[29] + x[163]) +
-    0.00046901918553962478f * (x[30] + x[162]) +
-    0.00027624866838952986f * (x[31] + x[161]) +
-    -0.00032564179486838622f * (x[33] + x[159]) +
-    -0.00065182310286710388f * (x[34] + x[158]) +
-    -0.00092127787309319298f * (x[35] + x[157]) +
-    -0.0010772534348943575f * (x[36] + x[156]) +
-    -0.0010737727700273478f * (x[37] + x[155]) +
-    -0.00088556645390392634f * (x[38] + x[154]) +
-    -0.00051581896090765534f * (x[39] + x[153]) +
-    0.00059548767193795277f * (x[41] + x[151]) +
-    0.0011803558710661009f * (x[42] + x[150]) +
-    0.0016527320270369871f * (x[43] + x[149]) +
-    0.0019152679330965555f * (x[44] + x[148]) +
-    0.0018927324805381538f * (x[45] + x[147]) +
-    0.0015481870327877937f * (x[46] + x[146]) +
-    0.00089470695834941306f * (x[47] + x[145]) +
-    -0.0010178225878206125f * (x[49] + x[143]) +
-    -0.0020037400552054292f * (x[50] + x[142]) +
-    -0.0027874356824117317f * (x[51] + x[141]) +
-    -0.003210329988021943f * (x[52] + x[140]) +
-    -0.0031540624117984395f * (x[53] + x[139]) +
-    -0.0025657163651900345f * (x[54] + x[138]) +
-    -0.0014750752642111449f * (x[55] + x[137]) +
-    0.0016624165446378462f * (x[57] + x[135]) +
-    0.0032591192839069179f * (x[58] + x[134]) +
-    0.0045165685815867747f * (x[59] + x[133]) +
-    0.0051838984346123896f * (x[60] + x[132]) +
-    0.0050774264697459933f * (x[61] + x[131]) +
-    0.0041192521414141585f * (x[62] + x[130]) +
-    0.0023628575417966491f * (x[63] + x[129]) +
-    -0.0026543507866759182f * (x[65] + x[127]) +
-    -0.0051990251084333425f * (x[66] + x[126]) +
-    -0.0072020238234656924f * (x[67] + x[125]) +
-    -0.0082672928192007358f * (x[68] + x[124]) +
-    -0.0081033739572956287f * (x[69] + x[123]) +
-    -0.006583111539570221f * (x[70] + x[122]) +
-    -0.0037839040415292386f * (x[71] + x[121]) +
-    0.0042781252851152507f * (x[73] + x[119]) +
-    0.0084176358598320178f * (x[74] + x[118]) +
-    0.01172566057463055f * (x[75] + x[117]) +
-    0.013550476647788672f * (x[76] + x[116]) +
-    0.013388189369997496f * (x[77] + x[115]) +
-    0.010979501242341259f * (x[78] + x[114]) +
-    0.006381274941685413f * (x[79] + x[113]) +
-    -0.007421229604153888f * (x[81] + x[111]) +
-    -0.01486456304340213f * (x[82] + x[110]) +
-    -0.021143584622178104f * (x[83] + x[109]) +
-    -0.02504275058758609f * (x[84] + x[108]) +
-    -0.025473530942547201f * (x[85] + x[107]) +
-    -0.021627310017882196f * (x[86] + x[106]) +
-    -0.013104323383225543f * (x[87] + x[105]) +
-    0.017065133989980476f * (x[89] + x[103]) +
-    0.036978919264451952f * (x[90] + x[102]) +
-    0.05823318062093958f * (x[91] + x[101]) +
-    0.079072012081405949f * (x[92] + x[100]) +
-    0.097675998716952317f * (x[93] + x[99]) +
-    0.11236045936950932f * (x[94] + x[98]) +
-    0.12176343577287731f * (x[95] + x[97]) +
-    0.125f * x[96];
+static float decimate(float* const x) {
+  register float y = 0.0f;
+  register const float const *a = x;
+  register const float const *b = x+192;
+  register const float const *w = w;
+
+  for (int i = 0; i < 96; i+=16) {
+    asm volatile(
+      // Load a[0-15], b[1-15]
+      "VLDMIA.32 %[a]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7,  s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t"
+      "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
+      // Decrement b because only loaded 15 floats
+      "SUB %[b], %[b], #4 \n\t"
+      // Add a[15:0] = a[1-15] + b[1-15]
+      "VADD.F32 s1,  s1,  s17 \n\t"
+      "VADD.F32 s2,  s2,  s18 \n\t"
+      "VADD.F32 s3,  s3,  s19 \n\t"
+      "VADD.F32 s4,  s4,  s20 \n\t"
+      "VADD.F32 s5,  s5,  s21 \n\t"
+      "VADD.F32 s6,  s6,  s22 \n\t"
+      "VADD.F32 s7,  s7,  s23 \n\t"
+      "VADD.F32 s8,  s8,  s24 \n\t"
+      "VADD.F32 s9,  s9,  s25 \n\t"
+      "VADD.F32 s10, s10, s26 \n\t"
+      "VADD.F32 s11, s11, s27 \n\t"
+      "VADD.F32 s12, s12, s28 \n\t"
+      "VADD.F32 s13, s13, s29 \n\t"
+      "VADD.F32 s14, s14, s30 \n\t"
+      "VADD.F32 s15, s15, s31 \n\t"
+      // Load w[1-15] now that S17-S31 are free
+      "VLDMIA.32 %[w]!, { s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
+      // Increment w because only loaded 15 floats
+      "ADD %[w], %[w], #4 \n\t"
+      // Multiply to compute w[1-15] * (a[1-15] + b[1-15])
+      "VMUL.F32 s1,  s1,  s17 \n\t"
+      "VMUL.F32 s2,  s2,  s18 \n\t"
+      "VMUL.F32 s3,  s3,  s19 \n\t"
+      "VMUL.F32 s4,  s4,  s20 \n\t"
+      "VMUL.F32 s5,  s5,  s21 \n\t"
+      "VMUL.F32 s6,  s6,  s22 \n\t"
+      "VMUL.F32 s7,  s7,  s23 \n\t"
+      "VMUL.F32 s8,  s8,  s24 \n\t"
+      "VMUL.F32 s9,  s9,  s25 \n\t"
+      "VMUL.F32 s10, s10, s26 \n\t"
+      "VMUL.F32 s11, s11, s27 \n\t"
+      "VMUL.F32 s12, s12, s28 \n\t"
+      "VMUL.F32 s13, s13, s29 \n\t"
+      "VMUL.F32 s14, s14, s30 \n\t"
+      "VMUL.F32 s15, s15, s31 \n\t"
+      // Accumulate w[1-15] * (a[1-15] + b[1-15]) into S16
+      "VADD.F32 s16, s16, s1  \n\t"
+      "VADD.F32 s16, s16, s2  \n\t"
+      "VADD.F32 s16, s16, s3  \n\t"
+      "VADD.F32 s16, s16, s4  \n\t"
+      "VADD.F32 s16, s16, s5  \n\t"
+      "VADD.F32 s16, s16, s6  \n\t"
+      "VADD.F32 s16, s16, s7  \n\t"
+      "VADD.F32 s16, s16, s8  \n\t"
+      "VADD.F32 s16, s16, s9  \n\t"
+      "VADD.F32 s16, s16, s10 \n\t"
+      "VADD.F32 s16, s16, s11 \n\t"
+      "VADD.F32 s16, s16, s12 \n\t"
+      "VADD.F32 s16, s16, s13 \n\t"
+      "VADD.F32 s16, s16, s14 \n\t"
+      "VADD.F32 s16, s16, s15 \n\t"
+      : [a] "+r" (a), [b] "+r" (b),
+        [w] "+r" (w), [y] "+t" (y)
+      :
+      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
+        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15",
+               "s17", "s18", "s19", "s20", "s21", "s22", "s23",
+        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31"
+    );
+  }
+  y += sinc_table[96] * x[96];
+
   memcpy(&x[FIR_SIZE - DECIMATE_FACTOR], x, DECIMATE_FACTOR * sizeof(float));
   return y;
 }
 
-void ayumi_process(struct ayumi* ay) {
+/*struct decimate2_result { float y1; float y2; };
+struct decimate2_result decimate2(float* const x1, float* const x2) {
+  register float y1 = 0.0f;
+  register float y2 = 0.0f;
+  register const float const *a1 = x1;
+  register const float const *b1 = x1+192+1;
+  register const float const *a2 = x2;
+  register const float const *b2 = x2+192+1;
+  register const float const *w = w;
+
+  for (int i = 0; i < 96; i+=8) {
+    asm volatile(
+      // Load a1[7:0], b1[7:0], a2[7:0], b2[7:0]
+      "VLDMIA.32 %[a1]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7  } \n\t"
+      "VLDMDB.32 %[b1]!, { s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t"
+      "VLDMIA.32 %[a2]!, { s16, s17, s18, s19, s20, s21, s22, s23 } \n\t"
+      "VLDMDB.32 %[b2]!, { s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
+      // Add a1[7:0] = a1[7:0]+b1[7:0]
+      "VADD.F32 s0,  s0,  s8  \n\t"
+      "VADD.F32 s1,  s1,  s9  \n\t"
+      "VADD.F32 s2,  s2,  s10 \n\t"
+      "VADD.F32 s3,  s3,  s11 \n\t"
+      "VADD.F32 s4,  s4,  s12 \n\t"
+      "VADD.F32 s5,  s5,  s13 \n\t"
+      "VADD.F32 s6,  s6,  s14 \n\t"
+      "VADD.F32 s7,  s7,  s15 \n\t"
+      // Add a2[7:0] = a2[7:0]+b2[7:0]
+      "VADD.F32 s16, s16, s24 \n\t"
+      "VADD.F32 s17, s17, s25 \n\t"
+      "VADD.F32 s18, s18, s26 \n\t"
+      "VADD.F32 s19, s19, s27 \n\t"
+      "VADD.F32 s20, s20, s28 \n\t"
+      "VADD.F32 s21, s21, s29 \n\t"
+      "VADD.F32 s22, s22, s30 \n\t"
+      "VADD.F32 s23, s23, s31 \n\t"
+      // Load w[7:0] now that S24-S31 (and S8-S15) are free
+      "VLDMIA.32 %[w]!, { s24, s25, s26, s27, s28, s29, s30, s31 } \n\t"
+      // Multiply to compute w[7:0] * (a1[7:0] + b1[7:0])
+      "VMUL.F32 s0,  s0,  s24 \n\t"
+      "VMUL.F32 s1,  s1,  s25 \n\t"
+      "VMUL.F32 s2,  s2,  s26 \n\t"
+      "VMUL.F32 s3,  s3,  s27 \n\t"
+      "VMUL.F32 s4,  s4,  s28 \n\t"
+      "VMUL.F32 s5,  s5,  s29 \n\t"
+      "VMUL.F32 s6,  s6,  s30 \n\t"
+      "VMUL.F32 s7,  s7,  s31 \n\t"
+      // Multiply to compute w[7:0] * (a2[7:0] + b2[7:0])
+      "VMUL.F32 s16, s16, s24 \n\t"
+      "VMUL.F32 s17, s17, s25 \n\t"
+      "VMUL.F32 s18, s18, s26 \n\t"
+      "VMUL.F32 s19, s19, s27 \n\t"
+      "VMUL.F32 s20, s20, s28 \n\t"
+      "VMUL.F32 s21, s21, s29 \n\t"
+      "VMUL.F32 s22, s22, s30 \n\t"
+      "VMUL.F32 s23, s23, s31 \n\t"
+      // Get y1 and y2 from ARM registers into S8 and S9
+      "VMOV s8, s9, %[y1], %[y2] \n\t"
+      // Accumulate w[7:0] * (a1[7:0] + b1[7:0]) into S8
+      // and w[7:0] * (a1[7:0] + b1[7:0]) into S9
+      "VADD.F32 s8,  s8,  s0  \n\t"
+      "VADD.F32 s9,  s9,  s16 \n\t"
+      "VADD.F32 s8,  s8,  s1  \n\t"
+      "VADD.F32 s9,  s9,  s17 \n\t"
+      "VADD.F32 s8,  s8,  s2  \n\t"
+      "VADD.F32 s9,  s9,  s18 \n\t"
+      "VADD.F32 s8,  s8,  s3  \n\t"
+      "VADD.F32 s9,  s9,  s19 \n\t"
+      "VADD.F32 s8,  s8,  s4  \n\t"
+      "VADD.F32 s9,  s9,  s20 \n\t"
+      "VADD.F32 s8,  s8,  s5  \n\t"
+      "VADD.F32 s9,  s9,  s21 \n\t"
+      "VADD.F32 s8,  s8,  s6  \n\t"
+      "VADD.F32 s9,  s9,  s22 \n\t"
+      "VADD.F32 s8,  s8,  s7  \n\t"
+      "VADD.F32 s9,  s9,  s23 \n\t"
+      // Restore S8 and S9 back to y1 and y2 designated ARM registers
+      "VMOV %[y1], %[y2], s8, s9 \n\t"
+      : [a1]   "+r" (a1), [b1]  "+r" (b1),
+        [a2]   "+r" (a2), [b2]  "+r" (b2),
+        [w]    "+r" (w),
+        [y1]   "+r" (y1), [y2]  "+r" (y2)
+      :
+      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
+        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15",
+        "s16", "s17", "s18", "s19", "s20", "s21", "s22", "s23",
+        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31"
+    );
+  }
+  y1 += sinc_table[96] * x1[96];
+  y2 += sinc_table[96] * x2[96];
+
+  memcpy(&x1[FIR_SIZE - DECIMATE_FACTOR], x1, DECIMATE_FACTOR * sizeof(float));
+  memcpy(&x2[FIR_SIZE - DECIMATE_FACTOR], x2, DECIMATE_FACTOR * sizeof(float));
+  return (struct decimate2_result){ y1, y2 };
+}*/
+
+static float* ayumi_process_internal(struct ayumi* const ay) {
   int i;
   float y1;
   float* c = ay->interp.c;
@@ -276,16 +461,25 @@ void ayumi_process(struct ayumi* ay) {
     }
     fir[i] = (c[2] * ay->x + c[1]) * ay->x + c[0];
   }
-  ay->cur = decimate(fir);
 }
 
-static float dc_filter(struct dc_filter* dc, int index, float x) {
+void ayumi_process(struct ayumi* const ay) {
+  ay->cur = decimate(ayumi_process_internal(ay));
+}
+
+/*void ayumi_process2(struct ayumi* const ay1, struct ayumi* const ay2) {
+  struct decimate2_result r = decimate2(ayumi_process_internal(ay1), ayumi_process_internal(ay2));
+  ay1->cur = r.y1;
+  ay2->cur = r.y2;
+}*/
+
+static float dc_filter(struct dc_filter* const dc, const int index, const float x) {
   dc->sum += -dc->delay[index] + x;
   dc->delay[index] = x; 
   return x - dc->sum / DC_FILTER_SIZE;
 }
 
-void ayumi_remove_dc(struct ayumi* ay) {
+void ayumi_remove_dc(struct ayumi* const ay) {
   ay->cur = dc_filter(&ay->dc, ay->dc_index, ay->cur);
   ay->dc_index = (ay->dc_index + 1) & (DC_FILTER_SIZE - 1);
 }
