@@ -40,7 +40,6 @@ struct ayumi {
   int envelope_shape;
   int envelope_segment;
   int envelope;
-  const float* dac_table;
   float step;
   float x;
   struct interpolator interp;

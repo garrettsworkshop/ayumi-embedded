@@ -5,28 +5,6 @@
 #include "ayumi_tables.c"
 
 static void reset_segment(struct ayumi* const ay);
-
-static int update_tone(struct ayumi* ay, const int index) {
-  struct tone_channel* ch = &ay->channels[index];
-  ch->tone_counter += 1;
-  if (ch->tone_counter >= ch->tone_period) {
-    ch->tone_counter = 0;
-    ch->tone ^= 1;
-  }
-  return ch->tone;
-}
-
-static int update_noise(struct ayumi* const ay) {
-  int bit0x3;
-  ay->noise_counter += 1;
-  if (ay->noise_counter >= (ay->noise_period << 1)) {
-    ay->noise_counter = 0;
-    bit0x3 = ((ay->noise ^ (ay->noise >> 3)) & 1);
-    ay->noise = (ay->noise >> 1) | (bit0x3 << 16);
-  }
-  return ay->noise & 1;
-}
-
 static void slide_up(struct ayumi* const ay) {
   ay->envelope += 1;
   if (ay->envelope > 31) {
@@ -34,7 +12,6 @@ static void slide_up(struct ayumi* const ay) {
     reset_segment(ay);
   }
 }
-
 static void slide_down(struct ayumi* const ay) {
   ay->envelope -= 1;
   if (ay->envelope < 0) {
@@ -42,14 +19,8 @@ static void slide_down(struct ayumi* const ay) {
     reset_segment(ay);
   }
 }
-
-static void hold_top(struct ayumi* const ay) {
-  (void) ay;
-}
-
-static void hold_bottom(struct ayumi* const ay) {
-  (void) ay;
-}
+static void hold_top(struct ayumi* const ay) { (void) ay; }
+static void hold_bottom(struct ayumi* const ay) { (void) ay; }
 
 static void (* const Envelopes[][2])(struct ayumi* const) = {
   {slide_down, hold_bottom},
@@ -79,7 +50,18 @@ static void reset_segment(struct ayumi* const ay) {
   ay->envelope = 0;
 }
 
-int update_envelope(struct ayumi* const ay) {
+static int update_noise(struct ayumi* const ay) {
+  int bit0x3;
+  ay->noise_counter += 1;
+  if (ay->noise_counter >= (ay->noise_period << 1)) {
+    ay->noise_counter = 0;
+    bit0x3 = ((ay->noise ^ (ay->noise >> 3)) & 1);
+    ay->noise = (ay->noise >> 1) | (bit0x3 << 16);
+  }
+  return ay->noise & 1;
+}
+
+static int update_envelope(struct ayumi* const ay) {
   ay->envelope_counter += 1;
   if (ay->envelope_counter >= ay->envelope_period) {
     ay->envelope_counter = 0;
@@ -88,17 +70,30 @@ int update_envelope(struct ayumi* const ay) {
   return ay->envelope;
 }
 
-static void update_mixer(struct ayumi* const ay) {
-  int i;
+static int update_tone(struct ayumi* ay, const int index) {
+  struct tone_channel* ch = &ay->channels[index];
+  ch->tone_counter += 1;
+  if (ch->tone_counter >= ch->tone_period) {
+    ch->tone_counter = 0;
+    ch->tone ^= 1;
+  }
+  return ch->tone;
+}
+
+#define update_mixer_loop(i) \
+  out = (update_tone(ay, i) | ay->channels[i].t_off) & (noise | ay->channels[i].n_off); \
+  out *= ay->channels[i].e_on ? envelope : ay->channels[i].volume * 2 + 1; \
+  cur += dac_table[out]; \
+
+static float update_mixer(struct ayumi* const ay) {
   int out;
   int noise = update_noise(ay);
   int envelope = update_envelope(ay);
-  ay->cur = 0;
-  for (i = 0; i < TONE_CHANNELS; i += 1) {
-    out = (update_tone(ay, i) | ay->channels[i].t_off) & (noise | ay->channels[i].n_off);
-    out *= ay->channels[i].e_on ? envelope : ay->channels[i].volume * 2 + 1;
-    ay->cur += ay->dac_table[out];
-  }
+  float cur = 0;
+  update_mixer_loop(0);
+  update_mixer_loop(1);
+  update_mixer_loop(2);
+  return ay->cur = cur;
 }
 
 int ayumi_configure(struct ayumi* const ay, const float clock_rate, const int sr) {
@@ -143,7 +138,6 @@ void ayumi_set_envelope_shape(struct ayumi* const ay, const int shape) {
   ay->envelope_segment = 0;
   reset_segment(ay);
 }
-
 
 #define decimate_mac16 \
       asm volatile( \
@@ -215,6 +209,7 @@ static float decimate(float *x) {
   register float *b = x+192;
   register const float *w = w;
   register float y = 0.0f;
+
   decimate_mac16;
   decimate_mac16;
   decimate_mac16;
@@ -227,29 +222,82 @@ static float decimate(float *x) {
   return y;
 }
 
+#define ayumi_process_internal_loop \
+
+
 static float* ayumi_process_internal(struct ayumi* const ay) {
-  int i;
-  float y1;
-  float* c = ay->interp.c;
-  float* y = ay->interp.y;
-  float* fir = &ay->fir[FIR_SIZE - ay->fir_index * DECIMATE_FACTOR];
+  // Caller-save VFP registers (not preserved across loop iterations)
+  register float y2_m_y0  __asm__("s2");
+  register float fir_i    __asm__("s3");
+  register float c0       __asm__("s4"); // These must be consecutive
+  register float c1       __asm__("s5"); // to use VLDMIA and VSTMIA
+  register float c2       __asm__("s6");
+  register float y0old    __asm__("s7");
+  register float y0       __asm__("s8");
+  register float y1       __asm__("s9");
+  register float y2       __asm__("s10");
+  register float cur      __asm__("s11");
+
+  // Callee-save VFP registers (preserved across loop iterations)
+  register float half     __asm__("s17") = 0.5f;
+  register float quarter  __asm__("s18") = 0.25f;
+  register float ay_x     __asm__("s19") = ay->x;
+  register float ay_step  __asm__("s20") = ay->step;
+  register int i;
+  register float* c = ay->interp.c;
+  register float* y = ay->interp.y;
+  register float* fir = &ay->fir[FIR_SIZE - ay->fir_index * DECIMATE_FACTOR];
+
   ay->fir_index = (ay->fir_index + 1) % (FIR_SIZE / DECIMATE_FACTOR - 1);
+
   for (i = DECIMATE_FACTOR - 1; i >= 0; i -= 1) {
-    ay->x += ay->step;
-    if (ay->x >= 1) {
-      ay->x -= 1;
-      y[0] = y[1];
-      y[1] = y[2];
-      y[2] = y[3];
-      update_mixer(ay);
-      y[3] = ay->cur;
-      y1 = y[2] - y[0];
-      c[0] = 0.5f * y[1] + 0.25f * (y[0] + y[2]);
-      c[1] = 0.5f * y1;
-      c[2] = 0.25f * (y[3] - y[1] - y1);
+    ay_x += ay_step;
+    if (ay_x >= 1) {
+      cur = update_mixer(ay);
+      asm volatile(
+        /* Decrement ay_x -= 1 */
+        /* Load old y[0-3] */
+        "VLDMIA.32 %[y], { %[y0old], %[y0], %[y1], %[y2] } \n\t"
+        /* Compute y2_m_y0 = y[2] - y[0] */
+        "VSUB.F32 %[y2_m_y0], %[y2], %[y0] \n\t"
+        /* Compute c0 = 0.5f * y[1] + 0.25f * (y[0] + y[2]) */
+        "VADD.F32 %[c0], %[y0], %[y2] \n\t"
+        "VMUL.F32 %[c0], %[c0], %[quarter] \n\t"
+        "VMUL.F32 %[c1], %[y1], %[half] \n\t" /* Use c1 to store 0.5f * y[1] */
+        "VADD.F32 %[c0], %[c0], %[c1] \n\t"
+        /* Compute c1 = 0.5f * y2_m_y0 */
+        "VADD.F32 %[c1], %[y2_m_y0], %[half] \n\t"
+        /* Compute c2 = 0.25f * (y[3] - y[1] - y2_m_y0) */
+        "VSUB.F32 %[c2], %[cur], %[y1] \n\t"
+        "VSUB.F32 %[c2], %[c2], %[y2_m_y0] \n\t"
+        "VMUL.F32 %[c2], %[c2], %[quarter] \n\t"
+        /* Store computed c[0-2]. */
+        /* Also tore old y[1-3] into y[0-2] and cur in y[3]. */
+        /* Notice we store y0old in c[3]. c[3] is a don't care so this store doesn't do anything. */
+        "VSTMIA.32 %[y], { %[c0], %[c1], %[c2], %[y0old], %[y0], %[y1], %[y2], %[cur] } \n\t"
+        : [cur] "=t" (cur), [y2_m_y0] "=t" (y2_m_y0), 
+          [c0] "=t" (c0), [c1] "=t" (c1), [c2] "=t" (c2), 
+          [y0old] "=t" (y0old), [y0] "=t" (y0), [y1] "=t" (y1), [y2] "=t" (y2)
+        : [y] "r" (y), [half] "t" (half), [quarter] "t" (quarter)
+        :
+      );
     }
-    fir[i] = (c[2] * ay->x + c[1]) * ay->x + c[0];
+    asm volatile(
+      /* Compute and store fir[i] = (c[2] * ay->x + c[1]) * ay->x + c[0] 
+         Also store ay->x back from register. */
+      "VMUL.F32 %[fir_i], %[c2], %[ay_x] \n\t"
+      "VADD.F32 %[fir_i], %[fir_i], %[c1] \n\t"
+      "VMUL.F32 %[fir_i], %[fir_i], %[ay_x] \n\t"
+      "VADD.F32 %[fir_i], %[fir_i], %[c0] \n\t"
+      "VSTR.32 %[fir_i], [%[fir_i_ptr]] \n\t"
+      "VSTR.32 %[ay_x], [%[ay_x_ptr]] \n\t"
+      : [fir_i] "=t" (fir_i)
+      : [c0] "t" (c0), [c1] "t" (c1), [c2] "t" (c2), [ay_x] "t" (ay_x),
+        [fir_i_ptr] "r" (&fir[i]), [ay_x_ptr] "r" (&ay->x)
+      :
+    );
   }
+  return fir;
 }
 
 void ayumi_process(struct ayumi* const ay) {
