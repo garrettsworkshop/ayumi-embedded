@@ -94,7 +94,7 @@ void ayumi_set_envelope_shape(struct ayumi* ay, int shape)
 void ayumi_process(struct ayumi* ay)
 ```
 
-*Renders the next stereo sample in ay->left and ay->right.*
+*Renders the next stereo sample in ay->cur.*
 
 **ay**: The pointer to the ayumi structure.
 
