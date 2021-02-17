@@ -81,7 +81,8 @@ static int update_tone(struct ayumi* ay, const int index) {
 }
 
 #define update_mixer_loop(i) \
-  out = (update_tone(ay, i) | ay->channels[i].t_off) & (noise | ay->channels[i].n_off); \
+  out = (update_tone(ay, i) | ay->channels[i].t_off) & \
+        (noise | ay->channels[i].n_off); \
   out *= ay->channels[i].e_on ? envelope : ay->channels[i].volume * 2 + 1; \
   cur += dac_table[out]; \
 
@@ -96,7 +97,8 @@ static float update_mixer(struct ayumi* const ay) {
   return ay->cur = cur;
 }
 
-int ayumi_configure(struct ayumi* const ay, const float clock_rate, const int sr) {
+int ayumi_configure(struct ayumi* const ay, 
+                    const float clock_rate, const int sr) {
   int i;
   memset(ay, 0, sizeof(struct ayumi));
   ay->step = clock_rate / (sr * 8 * DECIMATE_FACTOR);
@@ -108,7 +110,8 @@ int ayumi_configure(struct ayumi* const ay, const float clock_rate, const int sr
   return ay->step < 1;
 }
 
-void ayumi_set_tone(struct ayumi* const ay, const int index, const int period) {
+void ayumi_set_tone(struct ayumi* const ay, const int index,
+                    const int period) {
   int period_masked = period & 0xffff;
   ay->channels[index].tone_period = (period_masked == 0) | period_masked;
 }
@@ -117,13 +120,15 @@ void ayumi_set_noise(struct ayumi* const ay, const int period) {
   ay->noise_period = period & 0x1f;
 }
 
-void ayumi_set_mixer(struct ayumi* const ay, const int index, const int t_off, const int n_off, const int e_on) {
+void ayumi_set_mixer(struct ayumi* const ay, const int index, 
+                     const int t_off, const int n_off, const int e_on) {
   ay->channels[index].t_off = t_off & 1;
   ay->channels[index].n_off = n_off & 1;
   ay->channels[index].e_on = e_on;
 }
 
-void ayumi_set_volume(struct ayumi* const ay, const int index, const int volume) {
+void ayumi_set_volume(struct ayumi* const ay,
+                      const int index, const int volume) {
   ay->channels[index].volume = volume & 0xf;
 }
 
@@ -140,69 +145,73 @@ void ayumi_set_envelope_shape(struct ayumi* const ay, const int shape) {
 }
 
 #define decimate_mac16 \
-      asm volatile( \
-      /* Load a[0-15], b[1-15] */ \
-      "VLDMIA.32 %[a]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7,  s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t" \
-      "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
-      /* Decrement b because only loaded 15 floats */ \
-      "SUB %[b], %[b], #4 \n\t" \
-      /* Add a[1-7,9-15] = a[1-7,9-15] + b[1-7,9-15] */ \
-      "VADD.F32 s1,  s1,  s17 \n\t" \
-      "VADD.F32 s2,  s2,  s18 \n\t" \
-      "VADD.F32 s3,  s3,  s19 \n\t" \
-      "VADD.F32 s4,  s4,  s20 \n\t" \
-      "VADD.F32 s5,  s5,  s21 \n\t" \
-      "VADD.F32 s6,  s6,  s22 \n\t" \
-      "VADD.F32 s7,  s7,  s23 \n\t" \
-      "VADD.F32 s9,  s9,  s25 \n\t" \
-      "VADD.F32 s10, s10, s26 \n\t" \
-      "VADD.F32 s11, s11, s27 \n\t" \
-      "VADD.F32 s12, s12, s28 \n\t" \
-      "VADD.F32 s13, s13, s29 \n\t" \
-      "VADD.F32 s14, s14, s30 \n\t" \
-      "VADD.F32 s15, s15, s31 \n\t" \
-      /* Load w[1-15] now that S17-S31 are free */ \
-      "VLDMIA.32 %[w]!, { s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
-      /* Increment w because only loaded 15 floats */ \
-      "ADD %[w], %[w], #4 \n\t" \
-      /* Multiply to compute w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
-         Interleaved with accumulating w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
-         into y register */ \
-      "VMUL.F32 s1,  s1,  s17 \n\t" \
-      "VADD.F32 %[y], %[y], s1  \n\t" \
-      "VMUL.F32 s2,  s2,  s18 \n\t" \
-      "VADD.F32 %[y], %[y], s2  \n\t" \
-      "VMUL.F32 s3,  s3,  s19 \n\t" \
-      "VADD.F32 %[y], %[y], s3  \n\t" \
-      "VMUL.F32 s4,  s4,  s20 \n\t" \
-      "VADD.F32 %[y], %[y], s4  \n\t" \
-      "VMUL.F32 s5,  s5,  s21 \n\t" \
-      "VADD.F32 %[y], %[y], s5  \n\t" \
-      "VMUL.F32 s6,  s6,  s22 \n\t" \
-      "VADD.F32 %[y], %[y], s6  \n\t" \
-      "VMUL.F32 s7,  s7,  s23 \n\t" \
-      "VADD.F32 %[y], %[y], s7  \n\t" \
-      "VMUL.F32 s9,  s9,  s25 \n\t" \
-      "VADD.F32 %[y], %[y], s9  \n\t" \
-      "VMUL.F32 s10, s10, s26 \n\t" \
-      "VADD.F32 %[y], %[y], s10 \n\t" \
-      "VMUL.F32 s11, s11, s27 \n\t" \
-      "VADD.F32 %[y], %[y], s11 \n\t" \
-      "VMUL.F32 s12, s12, s28 \n\t" \
-      "VADD.F32 %[y], %[y], s12 \n\t" \
-      "VMUL.F32 s13, s13, s29 \n\t" \
-      "VADD.F32 %[y], %[y], s13 \n\t" \
-      "VMUL.F32 s14, s14, s30 \n\t" \
-      "VADD.F32 %[y], %[y], s14 \n\t" \
-      "VMUL.F32 s15, s15, s31 \n\t" \
-      : [a] "+r" (a), [b] "+r" (b), \
-        [w] "+r" (w), [y] "+t" (y) \
-      : \
-      : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7", \
-        "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15", \
-               "s17", "s18", "s19", "s20", "s21", "s22", "s23", \
-        "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31" \
-    );
+  asm volatile( \
+  /* Load a[0-15], b[1-15] */ \
+  "VLDMIA.32 %[a]!, { s0,  s1,  s2,  s3,  s4,  s5,  s6,  s7, " \
+  "                   s8,  s9,  s10, s11, s12, s13, s14, s15 } \n\t" \
+  "VLDMDB.32 %[b]!, {      s17, s18, s19, s20, s21, s22, s23, " \
+  "                   s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
+  /* Decrement b because only loaded 15 floats */ \
+  "SUB %[b], %[b], #4 \n\t" \
+  /* Add a[1-7,9-15] = a[1-7,9-15] + b[1-7,9-15] */ \
+  "VADD.F32 s1,  s1,  s17 \n\t" \
+  "VADD.F32 s2,  s2,  s18 \n\t" \
+  "VADD.F32 s3,  s3,  s19 \n\t" \
+  "VADD.F32 s4,  s4,  s20 \n\t" \
+  "VADD.F32 s5,  s5,  s21 \n\t" \
+  "VADD.F32 s6,  s6,  s22 \n\t" \
+  "VADD.F32 s7,  s7,  s23 \n\t" \
+  "VADD.F32 s9,  s9,  s25 \n\t" \
+  "VADD.F32 s10, s10, s26 \n\t" \
+  "VADD.F32 s11, s11, s27 \n\t" \
+  "VADD.F32 s12, s12, s28 \n\t" \
+  "VADD.F32 s13, s13, s29 \n\t" \
+  "VADD.F32 s14, s14, s30 \n\t" \
+  "VADD.F32 s15, s15, s31 \n\t" \
+  /* Load w[1-15] now that S17-S31 are free */ \
+  "VLDMIA.32 %[w]!, {      s17, s18, s19, s20, s21, s22, s23, " \
+  "                   s24, s25, s26, s27, s28, s29, s30, s31 } \n\t" \
+  /* Increment w because only loaded 15 floats */ \
+  "ADD %[w], %[w], #4 \n\t" \
+  /* Multiply to compute w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
+     Interleaved with accumulating 
+     w[1-7,9-15] * (a[1-7,9-15] + b[1-7,9-15]) \
+     into y register */ \
+  "VMUL.F32 s1,  s1,  s17 \n\t" \
+  "VADD.F32 %[y], %[y], s1  \n\t" \
+  "VMUL.F32 s2,  s2,  s18 \n\t" \
+  "VADD.F32 %[y], %[y], s2  \n\t" \
+  "VMUL.F32 s3,  s3,  s19 \n\t" \
+  "VADD.F32 %[y], %[y], s3  \n\t" \
+  "VMUL.F32 s4,  s4,  s20 \n\t" \
+  "VADD.F32 %[y], %[y], s4  \n\t" \
+  "VMUL.F32 s5,  s5,  s21 \n\t" \
+  "VADD.F32 %[y], %[y], s5  \n\t" \
+  "VMUL.F32 s6,  s6,  s22 \n\t" \
+  "VADD.F32 %[y], %[y], s6  \n\t" \
+  "VMUL.F32 s7,  s7,  s23 \n\t" \
+  "VADD.F32 %[y], %[y], s7  \n\t" \
+  "VMUL.F32 s9,  s9,  s25 \n\t" \
+  "VADD.F32 %[y], %[y], s9  \n\t" \
+  "VMUL.F32 s10, s10, s26 \n\t" \
+  "VADD.F32 %[y], %[y], s10 \n\t" \
+  "VMUL.F32 s11, s11, s27 \n\t" \
+  "VADD.F32 %[y], %[y], s11 \n\t" \
+  "VMUL.F32 s12, s12, s28 \n\t" \
+  "VADD.F32 %[y], %[y], s12 \n\t" \
+  "VMUL.F32 s13, s13, s29 \n\t" \
+  "VADD.F32 %[y], %[y], s13 \n\t" \
+  "VMUL.F32 s14, s14, s30 \n\t" \
+  "VADD.F32 %[y], %[y], s14 \n\t" \
+  "VMUL.F32 s15, s15, s31 \n\t" \
+  : [a] "+r" (a), [b] "+r" (b), \
+    [w] "+r" (w), [y] "+t" (y) \
+  : \
+  : "s0",  "s1",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7", \
+    "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15", \
+           "s17", "s18", "s19", "s20", "s21", "s22", "s23", \
+    "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31" \
+);
 
 static float decimate(float *x) {
   register float *a = x;
@@ -222,21 +231,18 @@ static float decimate(float *x) {
   return y;
 }
 
-#define ayumi_process_internal_loop \
-
-
 static float* ayumi_process_internal(struct ayumi* const ay) {
   // Caller-save VFP registers (not preserved across loop iterations)
   register float y2_m_y0  __asm__("s2");
   register float fir_i    __asm__("s3");
-  register float c0       __asm__("s4"); // These must be consecutive
-  register float c1       __asm__("s5"); // to use VLDMIA and VSTMIA
-  register float c2       __asm__("s6");
-  register float y0old    __asm__("s7");
-  register float y0       __asm__("s8");
-  register float y1       __asm__("s9");
-  register float y2       __asm__("s10");
-  register float cur      __asm__("s11");
+  register float c0       __asm__("s4");  // These must be consecutive
+  register float c1       __asm__("s5");  // to use VLDMIA and VSTMIA
+  register float c2       __asm__("s6");  // .
+  register float y0old    __asm__("s7");  // .
+  register float y0       __asm__("s8");  // .
+  register float y1       __asm__("s9");  // .
+  register float y2       __asm__("s10"); // .
+  register float cur      __asm__("s11"); // .
 
   // Callee-save VFP registers (preserved across loop iterations)
   register float half     __asm__("s17") = 0.5f;
@@ -263,7 +269,7 @@ static float* ayumi_process_internal(struct ayumi* const ay) {
         /* Compute c0 = 0.5f * y[1] + 0.25f * (y[0] + y[2]) */
         "VADD.F32 %[c0], %[y0], %[y2] \n\t"
         "VMUL.F32 %[c0], %[c0], %[quarter] \n\t"
-        "VMUL.F32 %[c1], %[y1], %[half] \n\t" /* Use c1 to store 0.5f * y[1] */
+        "VMUL.F32 %[c1], %[y1], %[half] \n\t" /* Use c1 to hold 0.5f * y[1] */
         "VADD.F32 %[c0], %[c0], %[c1] \n\t"
         /* Compute c1 = 0.5f * y2_m_y0 */
         "VADD.F32 %[c1], %[y2_m_y0], %[half] \n\t"
@@ -273,8 +279,10 @@ static float* ayumi_process_internal(struct ayumi* const ay) {
         "VMUL.F32 %[c2], %[c2], %[quarter] \n\t"
         /* Store computed c[0-2]. */
         /* Also tore old y[1-3] into y[0-2] and cur in y[3]. */
-        /* Notice we store y0old in c[3]. c[3] is a don't care so this store doesn't do anything. */
-        "VSTMIA.32 %[y], { %[c0], %[c1], %[c2], %[y0old], %[y0], %[y1], %[y2], %[cur] } \n\t"
+        /* Notice we store y0old in c[3]. c[3] is a don't care 
+         * so this store doesn't do anything. */
+        "VSTMIA.32 %[y], { %[c0], %[c1], %[c2], %[y0old], 
+                           %[y0], %[y1], %[y2], %[cur] } \n\t"
         : [cur] "=t" (cur), [y2_m_y0] "=t" (y2_m_y0), 
           [c0] "=t" (c0), [c1] "=t" (c1), [c2] "=t" (c2), 
           [y0old] "=t" (y0old), [y0] "=t" (y0), [y1] "=t" (y1), [y2] "=t" (y2)
@@ -304,7 +312,8 @@ void ayumi_process(struct ayumi* const ay) {
   ay->cur = decimate(ayumi_process_internal(ay));
 }
 
-static float dc_filter(struct dc_filter* const dc, const int index, const float x) {
+static float dc_filter(struct dc_filter* const dc, 
+                       const int index, const float x) {
   dc->sum += -dc->delay[index] + x;
   dc->delay[index] = x; 
   return x - dc->sum / DC_FILTER_SIZE;
